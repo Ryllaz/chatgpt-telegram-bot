@@ -1,0 +1,16 @@
+{
+  "name": "chatgpt-telegram-bot",
+  "version": "0.0.1",
+  "description": "",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "chatgpt": "^4.4.1",
+    "node-telegram-bot-api": "^0.61.0"
+  }
+}
