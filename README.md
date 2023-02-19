@@ -8,6 +8,7 @@ This bot uses simple auth via private Telegram group - bot will not work with us
 2. Create new API key: https://platform.openai.com/account/api-keys. Save it somewhere.
 3. Create telegram bot via message to https://t.me/BotFather. Save bot token somewhere.
 4. Create private group and add bot to it. Save somewhere ID of the group (ex. '-123456789')
+5. Add trusted users to private group you created.
 
 ## Usage
 You can set `TELEGRAM_AUTH_GROUP_ID`, `TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY` in your env.
