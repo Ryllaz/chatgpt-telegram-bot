@@ -1,13 +1,17 @@
 import { ChatGPTAPI } from "chatgpt";
 import TelegramBot from "node-telegram-bot-api";
+import * as dotenv from "dotenv";
+dotenv.config();
 
 const authorizedGroupId = process.env.TELEGRAM_AUTH_GROUP_ID;
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
 const telegramBotAlias = process.env.TELEGRAM_BOT_ALIAS;
+const telegramAdmin = process.env.TELEGRAM_ADMIN_NICKNAME;
 const openAiApiKey = process.env.OPENAI_API_KEY;
 
 const maxModelTokens = process.env.MAX_MODEL_TOKENS || 1000;
 const maxResponseTokens = process.env.MAX_RESPONSE_TOKENS || 1000;
+const throttleInterval = process.env.THROTTLE_INTERVAL || 20;
 const conversationsTimeout =
   process.env.CONVERSATIONS_TIMEOUT || 7 * 24 * 60 * 60 * 1000;
 
@@ -19,7 +23,7 @@ setInterval(() => {
   for (let chatId in conversations) {
     if (
       new Date().getTime() - conversationsTimeout >
-      conversations[chatId]?.lastMessage
+      conversations[chatId]?.lastMessageTime
     ) {
       delete conversations[chatId];
     }
@@ -44,12 +48,12 @@ bot.on("message", async (msg) => {
   if (user.status === "left") {
     await bot.sendMessage(
       msg.chat.id,
-      "You are not authorized for using this bot. Contact to @kemmor for it."
+      `You are not authorized for using this bot. Contact to ${telegramAdmin} for it.`
     );
     return;
   }
 
-  // start command 
+  // start command
   if (msg?.text?.match(/^\/start\s*$/)) {
     await bot.sendMessage(
       msg.chat.id,
@@ -71,17 +75,16 @@ bot.on("message", async (msg) => {
   }
 
   // prevent handling all messages from group chats
-  if (msg.chat.type === 'group') {
+  if (msg.chat.type === "group") {
     if (!msg?.text?.match(`^${telegramBotAlias} (.*)$`)) {
       return;
     }
   }
 
   try {
-    
     // send init message and typing status
     let waitMsg = await bot.sendMessage(chatId, "......");
-    bot.sendChatAction(chatId, 'typing');
+    bot.sendChatAction(chatId, "typing");
 
     let throttle = 0;
 
@@ -91,25 +94,23 @@ bot.on("message", async (msg) => {
       onProgress: async (partialResponse) => {
         throttle++;
 
-        // throttle every 100 progress letters to prevent overflow telegram API
-        if (throttle % 100 === 0 && waitMsg.text !== partialResponse.text) {
+        // throttle every ${throttleInterval} progress letters to prevent overflow telegram API
+        if (throttle % throttleInterval === 0 && waitMsg.text !== partialResponse.text) {
           // send typing and edit init message with partial response
-          bot.sendChatAction(chatId, 'typing');
+          bot.sendChatAction(chatId, "typing");
           waitMsg = await bot.editMessageText(partialResponse.text, {
             chat_id: chatId,
             message_id: waitMsg.message_id,
           });
+          throttle = 0;
         }
       },
     };
 
     // add conversations context if exists to chatgpt request params
     if (conversations[chatId]) {
-      chatgptSendingParams.conversationId =
-        conversations[chatId].conversationId;
-
       chatgptSendingParams.parentMessageId =
-        conversations[chatId].parentMessageId;
+        conversations[chatId].lastMessageId;
     }
 
     // send request
@@ -117,10 +118,11 @@ bot.on("message", async (msg) => {
 
     // save conversations context
     conversations[chatId] = {
-      conversationId: response.conversationId,
-      parentMessageId: response.id,
-      lastMessage: new Date().getTime(),
+      lastMessageId: response.conversationId,
+      lastMessageTime: new Date().getTime(),
     };
+
+    console.log(response);
 
     // final message update
     if (waitMsg.text !== response.text) {
