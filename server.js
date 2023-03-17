@@ -8,6 +8,7 @@ const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
 const telegramBotAlias = process.env.TELEGRAM_BOT_ALIAS;
 const telegramAdmin = process.env.TELEGRAM_ADMIN_NICKNAME;
 const openAiApiKey = process.env.OPENAI_API_KEY;
+const model = process.env.MODEL_ID;
 
 const maxModelTokens = process.env.MAX_MODEL_TOKENS || 1000;
 const maxResponseTokens = process.env.MAX_RESPONSE_TOKENS || 1000;
@@ -34,6 +35,9 @@ const api = new ChatGPTAPI({
   apiKey: openAiApiKey,
   maxModelTokens,
   maxResponseTokens,
+  completionParams: {
+    model
+  },
 });
 
 // Create a bot
@@ -83,25 +87,20 @@ bot.on("message", async (msg) => {
 
   try {
     // send init message and typing status
-    let waitMsg = await bot.sendMessage(chatId, "......");
     bot.sendChatAction(chatId, "typing");
 
     let throttle = 0;
 
     // create request params
     const chatgptSendingParams = {
-      timeoutMs: 5 * 60 * 1000,
+      // timeoutMs: 5 * 60 * 1000,
       onProgress: async (partialResponse) => {
         throttle++;
 
-        // throttle every ${throttleInterval} progress letters to prevent overflow telegram API
-        if (throttle % throttleInterval === 0 && waitMsg.text !== partialResponse.text) {
-          // send typing and edit init message with partial response
+        // continue typing with ${throttleInterval} throttle to prevent overflow telegram API
+        if (throttle % throttleInterval === 0) {
+          // send typing
           bot.sendChatAction(chatId, "typing");
-          waitMsg = await bot.editMessageText(partialResponse.text, {
-            chat_id: chatId,
-            message_id: waitMsg.message_id,
-          });
           throttle = 0;
         }
       },
@@ -114,23 +113,16 @@ bot.on("message", async (msg) => {
     }
 
     // send request
-    const response = await api.sendMessage(msg.text, chatgptSendingParams);
+    let response = await api.sendMessage(msg.text, chatgptSendingParams);
 
     // save conversations context
     conversations[chatId] = {
-      lastMessageId: response.conversationId,
+      lastMessageId: response.id,
       lastMessageTime: new Date().getTime(),
     };
 
-    console.log(response);
-
-    // final message update
-    if (waitMsg.text !== response.text) {
-      await bot.editMessageText(response.text, {
-        chat_id: chatId,
-        message_id: waitMsg.message_id,
-      });
-    }
+    // send response
+    if (response.text) await bot.sendMessage(chatId, response.text);
   } catch (e) {
     console.log(e);
   }
