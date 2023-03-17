@@ -1,4 +1,4 @@
-import { ChatGPTAPI } from "chatgpt";
+import { Configuration, OpenAIApi } from "openai";
 import TelegramBot from "node-telegram-bot-api";
 import * as dotenv from "dotenv";
 dotenv.config();
@@ -9,6 +9,7 @@ const telegramBotAlias = process.env.TELEGRAM_BOT_ALIAS;
 const telegramAdmin = process.env.TELEGRAM_ADMIN_NICKNAME;
 const openAiApiKey = process.env.OPENAI_API_KEY;
 const model = process.env.MODEL_ID;
+const modelType = process.env.MODEL_TYPE;
 
 const maxModelTokens = process.env.MAX_MODEL_TOKENS || 1000;
 const maxResponseTokens = process.env.MAX_RESPONSE_TOKENS || 1000;
@@ -31,14 +32,11 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-const api = new ChatGPTAPI({
+const configuration = new Configuration({
   apiKey: openAiApiKey,
-  maxModelTokens,
-  maxResponseTokens,
-  completionParams: {
-    model
-  },
 });
+
+const api = new OpenAIApi(configuration);
 
 // Create a bot
 const bot = new TelegramBot(telegramBotToken, { polling: true });
@@ -86,43 +84,50 @@ bot.on("message", async (msg) => {
   }
 
   try {
-    // send init message and typing status
+    let isTyping = true;
+
+    // send typing status
     bot.sendChatAction(chatId, "typing");
 
-    let throttle = 0;
+    // repeat typing status until response from chatgpt
+    setInterval(() => {
+      if (isTyping) bot.sendChatAction(chatId, "typing");
+    }, 4500);
 
-    // create request params
-    const chatgptSendingParams = {
-      // timeoutMs: 5 * 60 * 1000,
-      onProgress: async (partialResponse) => {
-        throttle++;
-
-        // continue typing with ${throttleInterval} throttle to prevent overflow telegram API
-        if (throttle % throttleInterval === 0) {
-          // send typing
-          bot.sendChatAction(chatId, "typing");
-          throttle = 0;
-        }
-      },
-    };
-
-    // add conversations context if exists to chatgpt request params
-    if (conversations[chatId]) {
-      chatgptSendingParams.parentMessageId =
-        conversations[chatId].lastMessageId;
-    }
+    let response;
 
     // send request
-    let response = await api.sendMessage(msg.text, chatgptSendingParams);
+    switch (modelType) {
+      case 'chat': {
+        response = await api.createChatCompletion({
+          model: model,
+          messages: [{role: 'user', content: msg.text}],
+        });
+        isTyping = false;
+      } break;
+
+      default:
+      case 'competition': {
+        response = await api.createCompletion({
+          model: model,
+          prompt: msg.text,
+          max_tokens: maxModelTokens,
+        });
+        isTyping = false;
+      } break;
+    }
 
     // save conversations context
     conversations[chatId] = {
-      lastMessageId: response.id,
+      lastMessageId: response.data.id,
       lastMessageTime: new Date().getTime(),
     };
 
+    // extract response message text
+    const text = response.data?.choices?.text || response.data?.choices[0]?.message?.content;
+
     // send response
-    if (response.text) await bot.sendMessage(chatId, response.text);
+    if (text) await bot.sendMessage(chatId, text);
   } catch (e) {
     console.log(e);
   }
