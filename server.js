@@ -102,6 +102,7 @@ bot.on("message", async (msg) => {
         response = await api.createChatCompletion({
           model: model,
           messages: [{role: 'user', content: msg.text}],
+          max_tokens: maxModelTokens,
         });
         isTyping = false;
       } break;
