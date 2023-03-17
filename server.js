@@ -102,7 +102,7 @@ bot.on("message", async (msg) => {
         response = await api.createChatCompletion({
           model: model,
           messages: [{role: 'user', content: msg.text}],
-          max_tokens: maxModelTokens,
+          max_tokens: +maxModelTokens,
         });
         isTyping = false;
       } break;
@@ -112,7 +112,7 @@ bot.on("message", async (msg) => {
         response = await api.createCompletion({
           model: model,
           prompt: msg.text,
-          max_tokens: maxModelTokens,
+          max_tokens: +maxModelTokens,
         });
         isTyping = false;
       } break;
