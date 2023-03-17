@@ -1,8 +1,6 @@
-FROM alpine
+FROM kemmor/node:18.14.1
 
 WORKDIR /usr/app
-
-RUN apk add --update nodejs=18.14.1-r0 npm
 
 COPY . .
 
